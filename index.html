@@ -285,7 +285,7 @@
         let currentScreen = "screen-register";
         let loopProiettoreInterval = null;
 
-        // Ascolti atomici per ottimizzazione banda
+        // Ascolti atomici per ottimizzazione banda - Aggiornati per forzare il refresh globale dell'interfaccia
         onValue(ref(realtimeDb, 'users'), (snapshot) => {
             const data = snapshot.val() || {};
             db.users = Object.values(data);
@@ -296,20 +296,19 @@
         onValue(ref(realtimeDb, 'likes'), (snapshot) => {
             const data = snapshot.val() || {};
             db.likes = Object.values(data);
-            if (currentScreen === 'screen-feed') renderFeed();
+            aggiornaUI();
         });
 
         onValue(ref(realtimeDb, 'matches'), (snapshot) => {
             const data = snapshot.val() || {};
             db.matches = Object.keys(data).map(k => ({ id: k, ...data[k] }));
-            if (currentScreen === 'screen-feed') renderFeed();
-            if (currentScreen === 'screen-admin') renderAdminPanel();
+            aggiornaUI();
         });
 
         onValue(ref(realtimeDb, 'messages'), (snapshot) => {
             const data = snapshot.val() || {};
             db.messages = Object.keys(data).map(k => ({ id: k, ...data[k] }));
-            if (currentScreen === 'screen-chat') renderMessaggiChat();
+            aggiornaUI();
         });
 
         function controllaUtenteCorrente() {
@@ -357,7 +356,6 @@
             const userId = 'usr_' + Date.now();
             const userObj = { id: userId, name: name, photo: selfieCatturatoBase64, likesCount: 3, cooldownEnd: null };
             
-            // Assegnazione rigorosa e immediata lato client prima della risposta del server
             localStorage.setItem('bm_currentUserId', String(userId));
             currentUser = userObj;
             
@@ -399,21 +397,11 @@
 
             const feedContainer = document.getElementById('users-feed-container');
             const utentiDisponibili = db.users.filter(u => {
-                // 1. Previene errori dati mancanti
                 if (!u || !u.id || !currentUser || !currentUser.id) return false;
-                
-                // 2. ESCLUSIONE DIRETTA: Controllo stringa assoluto sull'ID
                 if (String(u.id) === String(currentUser.id)) return false;
-                
-                // 3. ESCLUSIONE ANTI-CLONE: Se durante i test crei un utente identico al precedente, non vedrai il clone!
                 if (u.name === currentUser.name && u.photo === currentUser.photo) return false;
-
-                // 4. Esclusione se il match esiste già
                 if (db.matches.find(m => (m.u1 === currentUser.id && m.u2 === u.id) || (m.u1 === u.id && m.u2 === currentUser.id))) return false;
-                
-                // 5. Esclusione se hai già inviato il like
                 if (db.likes.some(l => l.from === currentUser.id && l.to === u.id)) return false;
-                
                 return true;
             });
 
@@ -437,6 +425,7 @@
         window.mettiLikeTinder = function(targetUserId) {
             if (!currentUser || (currentUser.cooldownEnd && Date.now() < currentUser.cooldownEnd) || currentUser.likesCount <= 0) return;
             push(ref(realtimeDb, 'likes'), { from: currentUser.id, to: targetUserId, time: Date.now() });
+            
             if (db.likes.some(l => l.from === targetUserId && l.to === currentUser.id)) {
                 const matchId = push(ref(realtimeDb, 'matches')).key;
                 set(ref(realtimeDb, `matches/${matchId}`), { u1: currentUser.id, u2: targetUserId, shotClaimed: false });
