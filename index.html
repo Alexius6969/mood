@@ -12,6 +12,7 @@
         body { font-family: 'Montserrat', sans-serif; }
         .neon-border { box-shadow: 0 0 12px #facc15, 0 0 24px rgba(250, 204, 21, 0.3); }
         .neon-text { text-shadow: 0 0 5px #facc15, 0 0 10px rgba(250, 204, 21, 0.5); }
+        .neon-border-heart { box-shadow: 0 0 12px #ef4444, 0 0 24px rgba(239, 68, 68, 0.3); }
         
         #video-container {
             position: relative;
@@ -211,12 +212,12 @@
                 <div class="col-span-8 space-y-6">
                     <p class="text-4xl text-stone-200 font-medium leading-relaxed">Sfoglia i profili di chi è seduto in giardino o al bancone.</p>
                     <div class="text-2xl text-stone-300 space-y-3">
-                        <p>👑 Ti piace qualcuno? Clicca sulla <span class="text-yellow-400 font-bold">Corona</span>.</p>
+                        <p>❤️ Ti piace qualcuno? Clicca sul <span class="text-red-500 font-bold">Cuore</span>.</p>
                         <p>❌ Vuoi passare oltre? Clicca sulla <span class="text-red-400 font-bold">Croce</span>.</p>
                     </div>
                     <p class="text-lg text-amber-400 font-bold bg-amber-500/5 border border-amber-500/20 p-4 rounded-xl inline-block">⚠️ Attenzione: Hai solo 3 Like a disposizione! Poi scatta il cooldown. Usali bene!</p>
                 </div>
-                <div class="col-span-4 text-center text-9xl bg-stone-900 p-12 rounded-3xl border border-stone-800">👑</div>
+                <div class="col-span-4 text-center text-9xl bg-stone-900 p-12 rounded-3xl border border-stone-800">❤️</div>
             </div>
             <p class="text-sm text-stone-500 uppercase tracking-widest text-center">Mood Lounge Bar • Match & Shot Edition</p>
         </div>
@@ -251,7 +252,7 @@
                 <div class="space-y-6 text-left text-2xl text-stone-300">
                     <div class="flex items-center space-x-6"><span class="bg-amber-400 text-stone-950 font-black w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0">1</span><p><strong>SCANNA</strong> il QR Code sul tavolo 📲</p></div>
                     <div class="flex items-center space-x-6"><span class="bg-amber-400 text-stone-950 font-black w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0">2</span><p><strong>SCATTA</strong> il tuo selfie live 📸</p></div>
-                    <div class="flex items-center space-x-6"><span class="bg-amber-400 text-stone-950 font-black w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0">3</span><p><strong>VOTA</strong> chi ti piace nel locale 👑</p></div>
+                    <div class="flex items-center space-x-6"><span class="bg-amber-400 text-stone-950 font-black w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0">3</span><p><strong>VOTA</strong> chi ti piace nel locale ❤️</p></div>
                     <div class="flex items-center space-x-6"><span class="bg-amber-400 text-stone-950 font-black w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0">4</span><p><strong>INCONTRA</strong> il tuo Match & ritira lo shot! 🥂</p></div>
                 </div>
                 <div class="w-56 h-56 bg-white text-stone-950 rounded-3xl flex flex-col items-center justify-center p-4 border-4 border-amber-400 font-bold text-sm shadow-2xl"><span class="text-5xl mb-2">📲</span>IL TUO QR CODE</div>
@@ -261,7 +262,7 @@
     </div>
 
 
-    <!-- LOGICA DI SINCRONIZZAZIONE LIVE CON FIREBASE -->
+    <!-- LOGICA DI SINCRONIZZAZIONE LIVE CON FIREBASE OTTIMIZZATA PER +150 UTENTI -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -293,20 +294,41 @@
         let currentScreen = "screen-register";
         let loopProiettoreInterval = null;
 
-        onValue(ref(realtimeDb, '/'), (snapshot) => {
+        // OTTIMIZZAZIONE: Ascolti separati per ridurre il consumo di banda.
+        // Invece di ascoltare la radice '/', ascoltiamo i nodi singolarmente.
+        onValue(ref(realtimeDb, 'users'), (snapshot) => {
             const data = snapshot.val() || {};
-            db.users = data.users ? Object.values(data.users) : [];
-            db.likes = data.likes ? Object.values(data.likes) : [];
-            db.matches = [];
-            if (data.matches) Object.keys(data.matches).forEach(k => db.matches.push({ id: k, ...data.matches[k] }));
-            db.messages = [];
-            if (data.messages) Object.keys(data.messages).forEach(k => db.messages.push({ id: k, ...data.messages[k] }));
-
-            const myId = localStorage.getItem('bm_currentUserId');
-            if (myId) currentUser = db.users.find(u => u.id === myId) || null;
-            if (currentUser && currentScreen === "screen-register") mostraSchermata('screen-feed');
+            db.users = Object.values(data);
+            controllaUtenteCorrente();
             aggiornaUI();
         });
+
+        onValue(ref(realtimeDb, 'likes'), (snapshot) => {
+            const data = snapshot.val() || {};
+            db.likes = Object.values(data);
+            if (currentScreen === 'screen-feed') renderFeed();
+        });
+
+        onValue(ref(realtimeDb, 'matches'), (snapshot) => {
+            const data = snapshot.val() || {};
+            db.matches = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+            if (currentScreen === 'screen-feed') renderFeed();
+            if (currentScreen === 'screen-admin') renderAdminPanel();
+        });
+
+        onValue(ref(realtimeDb, 'messages'), (snapshot) => {
+            const data = snapshot.val() || {};
+            db.messages = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+            if (currentScreen === 'screen-chat') renderMessaggiChat();
+        });
+
+        function controllaUtenteCorrente() {
+            const myId = localStorage.getItem('bm_currentUserId');
+            if (myId) {
+                currentUser = db.users.find(u => u.id === myId) || null;
+                if (currentUser && currentScreen === "screen-register") mostraSchermata('screen-feed');
+            }
+        }
 
         function mostraSchermata(id) {
             if (id === 'screen-register' && currentUser) id = 'screen-feed';
@@ -336,7 +358,9 @@
             if (!name || !selfieCatturatoBase64) { alert("Inserisci il tuo nome e fai una foto!"); return; }
             const userId = 'usr_' + Date.now();
             const userObj = { id: userId, name: name, photo: selfieCatturatoBase64, likesCount: 3, cooldownEnd: null };
-            set(ref(realtimeDb, 'users/' + userId), userObj).then(() => { localStorage.setItem('bm_currentUserId', userId); });
+            set(ref(realtimeDb, 'users/' + userId), userObj).then(() => { 
+                localStorage.setItem('bm_currentUserId', userId); 
+            });
         };
 
         // INTERFACCIA TINDER STYLE
@@ -368,6 +392,7 @@
 
             const feedContainer = document.getElementById('users-feed-container');
             const utentiDisponibili = db.users.filter(u => {
+                // IL PROPRIO PROFILO NON DEVE USCIRE: Questa riga lo garantisce in modo sicuro
                 if (u.id === currentUser.id) return false;
                 if (db.matches.find(m => (m.u1 === currentUser.id && m.u2 === u.id) || (m.u1 === u.id && m.u2 === currentUser.id))) return false;
                 if (db.likes.some(l => l.from === currentUser.id && l.to === u.id)) return false;
@@ -384,7 +409,7 @@
             if (currentCardIndex >= utentiDisponibili.length) currentCardIndex = 0;
             let u = utentiDisponibili[currentCardIndex];
             if (lastRenderedUserId !== u.id) {
-                feedContainer.innerHTML = `<div class="flex items-center justify-between space-x-3 max-w-sm mx-auto my-2"><button onclick="saltaUtente()" class="w-14 h-14 bg-stone-900 border border-stone-800 text-red-500 text-xl rounded-full flex items-center justify-center shadow-xl active:scale-90 flex-shrink-0 hover:bg-stone-800 transition">❌</button><div class="flex-1 bg-stone-900 border border-stone-800 rounded-3xl overflow-hidden shadow-2xl relative aspect-[3/4] max-w-[270px] mx-auto"><img src="${u.photo}" class="w-full h-full object-cover select-none pointer-events-none"><div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-stone-950 via-stone-950/80 to-transparent p-4 pt-12"><h4 class="font-black text-2xl text-white tracking-wide truncate">${u.name}</h4><p class="text-xs text-amber-400 flex items-center mt-1 font-semibold"><span class="inline-block w-2.5 h-2.5 bg-amber-400 rounded-full mr-2 animate-pulse"></span>Al Mood ora</p></div></div><button onclick="mettiLikeTinder('${u.id}')" class="w-14 h-14 bg-stone-900 border border-stone-800 text-yellow-400 text-xl rounded-full flex items-center justify-center shadow-xl active:scale-90 flex-shrink-0 neon-border hover:bg-stone-800 transition">👑</button></div>`;
+                feedContainer.innerHTML = `<div class="flex items-center justify-between space-x-3 max-w-sm mx-auto my-2"><button onclick="saltaUtente()" class="w-14 h-14 bg-stone-900 border border-stone-800 text-red-500 text-xl rounded-full flex items-center justify-center shadow-xl active:scale-90 flex-shrink-0 hover:bg-stone-800 transition">❌</button><div class="flex-1 bg-stone-900 border border-stone-800 rounded-3xl overflow-hidden shadow-2xl relative aspect-[3/4] max-w-[270px] mx-auto"><img src="${u.photo}" class="w-full h-full object-cover select-none pointer-events-none"><div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-stone-950 via-stone-950/80 to-transparent p-4 pt-12"><h4 class="font-black text-2xl text-white tracking-wide truncate">${u.name}</h4><p class="text-xs text-amber-400 flex items-center mt-1 font-semibold"><span class="inline-block w-2.5 h-2.5 bg-amber-400 rounded-full mr-2 animate-pulse"></span>Al Mood ora</p></div></div><button onclick="mettiLikeTinder('${u.id}')" class="w-14 h-14 bg-stone-900 border border-stone-800 text-red-500 text-xl rounded-full flex items-center justify-center shadow-xl active:scale-90 flex-shrink-0 neon-border-heart hover:bg-stone-800 transition">❤️</button></div>`;
                 lastRenderedUserId = u.id;
             }
         }
