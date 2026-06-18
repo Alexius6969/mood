@@ -56,7 +56,7 @@
             <span class="font-bold text-amber-400">Ruolo Attuale:</span>
             <select id="roleSelector" onchange="switchRole(this.value)" class="bg-stone-800 text-white border border-stone-700 rounded px-1 ml-2 focus:outline-none focus:border-amber-500">
                 <option value="user">Utente Corrente</option>
-                <option value="admin">Barista (Admin Mood)</option>
+                <option value="admin">Pannello Staff (Admin)</option>
             </select>
         </div>
 
@@ -144,12 +144,12 @@
                 </div>
             </div>
 
-            <!-- 4. PANNELLO PRIVATO BARISTA / STAFF -->
+            <!-- 4. PANNELLO PRIVATO BARISTA / STAFF (GESTIONE MULTI-ACCOUNT) -->
             <div id="screen-admin" class="bg-stone-900 border border-stone-800 rounded-2xl p-6 hidden shadow-2xl">
                 <div id="admin-login-box" class="space-y-4">
                     <h2 class="text-xl font-bold text-amber-400 mb-2 text-center">🔐 Accesso Riservato Staff Mood</h2>
                     <div>
-                        <label class="block text-sm text-stone-400 mb-1">Username Staff</label>
+                        <label class="block text-sm text-stone-400 mb-1">Username</label>
                         <input type="text" id="admin-username" placeholder="Inserisci username..." class="w-full bg-stone-950 border border-stone-700 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500 transition">
                     </div>
                     <div>
@@ -161,17 +161,25 @@
 
                 <div id="admin-content-box" class="hidden space-y-4">
                     <div class="flex items-center justify-between border-b border-stone-800 pb-3 mb-2">
-                        <h2 class="text-lg font-bold text-amber-400">Pannello Gestione Barista</h2>
+                        <h2 class="text-lg font-bold text-amber-400" id="admin-title">Pannello di Controllo</h2>
                         <button onclick="logoutAdmin()" class="text-xs bg-red-950/40 hover:bg-red-900 text-red-300 border border-red-900/40 px-2 py-1 rounded transition">Logout Staff</button>
                     </div>
                     
-                    <!-- BOTTONE MAGICO PER PROIETTORE -->
-                    <button onclick="avviaProiezioneGiardino()" class="w-full bg-stone-950 border border-amber-500 text-amber-400 font-black p-4 rounded-xl text-sm transition hover:bg-stone-900 uppercase tracking-wider shadow-lg neon-border mb-4">
-                        📺 Avvia Proiezione Giardino (16:9)
-                    </button>
+                    <!-- SEZIONE PRESENTATORE (PROIETTORE) -->
+                    <div id="admin-projector-section" class="hidden">
+                        <button onclick="avviaProiezioneGiardino()" class="w-full bg-stone-950 border border-amber-500 text-amber-400 font-black p-4 rounded-xl text-sm transition hover:bg-stone-900 uppercase tracking-wider shadow-lg neon-border mb-4">
+                            📺 Avvia Proiezione Giardino (16:9)
+                        </button>
+                        <p class="text-xs text-stone-400 text-center italic">Le funzioni di gestione cassa ed erogazione shot sono disabilitate per questo account.</p>
+                    </div>
                     
-                    <div id="admin-matches-list" class="space-y-4"></div>
-                    <div class="border-t border-stone-800 pt-4 mt-6"><button onclick="resettareTutto()" class="w-full bg-red-950/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 rounded-xl p-2.5 text-xs font-bold transition">⚠️ Svuota Database Cloud Completo</button></div>
+                    <!-- SEZIONE BARISTA -->
+                    <div id="admin-barman-section" class="hidden space-y-4">
+                        <div id="admin-matches-list" class="space-y-4"></div>
+                        <div class="border-t border-stone-800 pt-4 mt-6">
+                            <button onclick="resettareTutto()" class="w-full bg-red-950/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 rounded-xl p-2.5 text-xs font-bold transition">⚠️ Svuota Database Cloud Completo</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -287,6 +295,7 @@
         let videoStream = null;
         let selfieCatturatoBase64 = null;
         let isAdminAuthenticated = false; 
+        let adminRole = null; // 'barman' oppure 'presenter'
         let isFallbackMode = false;
         let currentCardIndex = 0;
         let lastRenderedUserId = null;
@@ -294,8 +303,7 @@
         let currentScreen = "screen-register";
         let loopProiettoreInterval = null;
 
-        // OTTIMIZZAZIONE: Ascolti separati per ridurre il consumo di banda.
-        // Invece di ascoltare la radice '/', ascoltiamo i nodi singolarmente.
+        // Ascolti atomici per ottimizzazione banda (+150 persone online)
         onValue(ref(realtimeDb, 'users'), (snapshot) => {
             const data = snapshot.val() || {};
             db.users = Object.values(data);
@@ -392,8 +400,7 @@
 
             const feedContainer = document.getElementById('users-feed-container');
             const utentiDisponibili = db.users.filter(u => {
-                // IL PROPRIO PROFILO NON DEVE USCIRE: Questa riga lo garantisce in modo sicuro
-                if (u.id === currentUser.id) return false;
+                if (u.id === currentUser.id) return false; // Esclusione profilo personale
                 if (db.matches.find(m => (m.u1 === currentUser.id && m.u2 === u.id) || (m.u1 === u.id && m.u2 === currentUser.id))) return false;
                 if (db.likes.some(l => l.from === currentUser.id && l.to === u.id)) return false;
                 return true;
@@ -481,27 +488,86 @@
             }
         }, 1000);
 
-        // LOGICA PANEL STAFF RISERVATO
+        // LOGICA PANEL STAFF GESTIONE MULTI-ACCOUNT
         window.loginAdmin = function() {
-            if (document.getElementById('admin-username').value.trim() === "Mood" && document.getElementById('admin-password').value === "Mood26!") {
-                isAdminAuthenticated = true; document.getElementById('admin-username').value = ""; document.getElementById('admin-password').value = ""; renderAdminPanel();
-            } else alert("Credenziali errate.");
+            const user = document.getElementById('admin-username').value.trim();
+            const pass = document.getElementById('admin-password').value;
+            
+            if (user === "Mood" && pass === "Mood26!") {
+                isAdminAuthenticated = true;
+                adminRole = "barman";
+                pulisciCampiLoginAdmin();
+                renderAdminPanel();
+            } else if (user === "Staff" && pass === "Staff26!") {
+                isAdminAuthenticated = true;
+                adminRole = "presenter";
+                pulisciCampiLoginAdmin();
+                renderAdminPanel();
+            } else {
+                alert("Credenziali errate.");
+            }
         };
-        window.logoutAdmin = function() { isAdminAuthenticated = false; renderAdminPanel(); };
-        function renderAdminPanel() {
-            const loginBox = document.getElementById('admin-login-box'); const contentBox = document.getElementById('admin-content-box');
-            if (!isAdminAuthenticated) { loginBox.classList.remove('hidden'); contentBox.classList.add('hidden'); return; }
-            loginBox.classList.add('hidden'); contentBox.classList.remove('hidden');
-            const container = document.getElementById('admin-matches-list'); container.innerHTML = "";
-            if (db.matches.length === 0) { container.innerHTML = `<p class="text-center text-sm text-stone-500 py-8">Nessun match attivo nel locale per ora.</p>`; return; }
-            db.matches.forEach(m => {
-                const u1 = db.users.find(u => u.id === m.u1); const u2 = db.users.find(u => u.id === m.u2); if (!u1 || !u2) return;
-                const item = document.createElement('div'); item.className = "bg-stone-950 p-4 border border-stone-800 rounded-xl flex flex-col space-y-3";
-                let adminBtn = m.shotClaimed ? `<span class="w-full text-center block bg-stone-900 text-emerald-400 border border-emerald-900/40 text-xs font-bold p-2 rounded-lg uppercase">Shot Erogati ✓</span>` : `<button onclick="convalidaShotAdmin('${m.id}')" class="w-full bg-gradient-to-r from-yellow-400 to-amber-500 text-stone-950 text-xs font-black p-2 rounded-lg uppercase transition hover:opacity-90">Convalida e Offri Shot 🥂</button>`;
-                item.innerHTML = `<div class="flex items-center justify-around text-center"><div><img src="${u1.photo}" class="w-12 h-12 rounded-full mx-auto object-cover border-2 border-stone-700"><p class="text-xs font-bold mt-1 text-stone-300">${u1.name}</p></div><div class="text-amber-400 font-bold text-xl neon-text">⚡</div><div><img src="${u2.photo}" class="w-12 h-12 rounded-full mx-auto object-cover border-2 border-stone-700"><p class="text-xs font-bold mt-1 text-stone-300">${u2.name}</p></div></div>${adminBtn}`;
-                container.appendChild(item);
-            });
+
+        function pulisciCampiLoginAdmin() {
+            document.getElementById('admin-username').value = ""; 
+            document.getElementById('admin-password').value = "";
         }
+
+        window.logoutAdmin = function() { 
+            isAdminAuthenticated = false; 
+            adminRole = null; 
+            renderAdminPanel(); 
+        };
+
+        function renderAdminPanel() {
+            const loginBox = document.getElementById('admin-login-box'); 
+            const contentBox = document.getElementById('admin-content-box');
+            
+            if (!isAdminAuthenticated) { 
+                loginBox.classList.remove('hidden'); 
+                contentBox.classList.add('hidden'); 
+                return; 
+            }
+            
+            loginBox.classList.add('hidden'); 
+            contentBox.classList.remove('hidden');
+            
+            const titleElement = document.getElementById('admin-title');
+            const projectorSection = document.getElementById('admin-projector-section');
+            const barmanSection = document.getElementById('admin-barman-section');
+            
+            // Rendering condizionale basato sul ruolo loggato
+            if (adminRole === "presenter") {
+                titleElement.innerText = "Pannello Presentatore (Proiettore)";
+                projectorSection.classList.remove('hidden');
+                barmanSection.classList.add('hidden');
+            } else if (adminRole === "barman") {
+                titleElement.innerText = "Pannello Gestione Barista";
+                projectorSection.classList.add('hidden');
+                barmanSection.classList.remove('hidden');
+                
+                const container = document.getElementById('admin-matches-list'); 
+                container.innerHTML = "";
+                
+                if (db.matches.length === 0) { 
+                    container.innerHTML = `<p class="text-center text-sm text-stone-500 py-8">Nessun match attivo nel locale per ora.</p>`; 
+                    return; 
+                }
+                
+                db.matches.forEach(m => {
+                    const u1 = db.users.find(u => u.id === m.u1); 
+                    const u2 = db.users.find(u => u.id === m.u2); 
+                    if (!u1 || !u2) return;
+                    
+                    const item = document.createElement('div'); 
+                    item.className = "bg-stone-950 p-4 border border-stone-800 rounded-xl flex flex-col space-y-3";
+                    let adminBtn = m.shotClaimed ? `<span class="w-full text-center block bg-stone-900 text-emerald-400 border border-emerald-900/40 text-xs font-bold p-2 rounded-lg uppercase">Shot Erogati ✓</span>` : `<button onclick="convalidaShotAdmin('${m.id}')" class="w-full bg-gradient-to-r from-yellow-400 to-amber-500 text-stone-950 text-xs font-black p-2 rounded-lg uppercase transition hover:opacity-90">Convalida e Offri Shot 🥂</button>`;
+                    item.innerHTML = `<div class="flex items-center justify-around text-center"><div><img src="${u1.photo}" class="w-12 h-12 rounded-full mx-auto object-cover border-2 border-stone-700"><p class="text-xs font-bold mt-1 text-stone-300">${u1.name}</p></div><div class="text-amber-400 font-bold text-xl neon-text">⚡</div><div><img src="${u2.photo}" class="w-12 h-12 rounded-full mx-auto object-cover border-2 border-stone-700"><p class="text-xs font-bold mt-1 text-stone-300">${u2.name}</p></div></div>${adminBtn}`;
+                    container.appendChild(item);
+                });
+            }
+        }
+
         window.convalidaShotAdmin = function(matchId) { update(ref(realtimeDb, `matches/${matchId}`), { shotClaimed: true }); };
         window.resettareTutto = function() { if(confirm("Cancellare tutto il database cloud?")) { stopVideoFeed(); localStorage.clear(); set(ref(realtimeDb, '/'), null).then(() => location.reload()); } };
         window.switchRole = function(role) { if (role === "admin") mostraSchermata('screen-admin'); else mostraSchermata(currentUser ? 'screen-feed' : 'screen-register'); };
