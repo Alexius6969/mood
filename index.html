@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
-        
         body { font-family: 'Montserrat', sans-serif; }
         .neon-border { box-shadow: 0 0 12px #facc15, 0 0 24px rgba(250, 204, 21, 0.3); }
         .neon-text { text-shadow: 0 0 5px #facc15, 0 0 10px rgba(250, 204, 21, 0.5); }
@@ -61,7 +60,7 @@
             
             <header class="text-center my-6 flex flex-col items-center justify-center">
                 <div class="relative mb-3">
-                    <img src="mood.jpg" alt="Mood Lounge Bar Logo" class="w-24 h-24 object-cover rounded-full border-2 border-amber-400 p-1 shadow-xl shadow-amber-500/10">
+                    <img src="mood.jpg" alt="Mood Lounge Bar Logo" class="w-24 h-24 object-cover rounded-full border-2 border-amber-400 p-1 shadow-xl shadow-amber-500/10" onerror="this.src='https://via.placeholder.com/150'">
                     <span class="absolute bottom-0 right-1 bg-emerald-500 w-4 h-4 rounded-full border-2 border-stone-950 animate-pulse"></span>
                 </div>
                 <h1 class="text-3xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 neon-text">
@@ -181,7 +180,7 @@
         
         <div class="projector-slide active">
             <div class="flex flex-col items-center justify-center my-auto text-center w-full">
-                <img src="mood.jpg" class="w-40 h-40 rounded-full border-4 border-amber-400 p-1.5 mb-8 object-cover shadow-2xl">
+                <img src="mood.jpg" class="w-40 h-40 rounded-full border-4 border-amber-400 p-1.5 mb-8 object-cover shadow-2xl" onerror="this.src='https://via.placeholder.com/150'">
                 <h1 class="text-8xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 neon-text uppercase">MOOD MATCH</h1>
                 <p class="text-3xl text-stone-300 mt-4 font-bold">Trova chi ti piace nel locale. ORA.</p>
                 <div class="mt-12 border-2 border-dashed border-amber-500/30 px-8 py-4 rounded-2xl bg-stone-900/40"><p class="text-amber-400 font-black text-xl tracking-wider">📲 INQUADRA IL QR CODE SUL TAVOLO PER ENTRARE IN GIOCO</p></div>
@@ -256,7 +255,6 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-
         const firebaseConfig = {
           apiKey: "AIzaSyDmLp1DwC1CLN-JonVvXjwgTx00sEcrzUs",
           authDomain: "barmatch-c40ff.firebaseapp.com",
@@ -267,7 +265,6 @@
           appId: "1:585815472788:web:b0aa828759a6a948439281",
           measurementId: "G-1NSG9DLKDQ"
         };
-
         const app = initializeApp(firebaseConfig);
         const realtimeDb = getDatabase(app);
 
@@ -276,7 +273,7 @@
         let activeChatMatchId = null;
         let videoStream = null;
         let selfieCatturatoBase64 = null;
-        let isAdminAuthenticated = false; 
+        let isAdminAuthenticated = false;
         let adminRole = null; 
         let isFallbackMode = false;
         let currentCardIndex = 0;
@@ -292,19 +289,16 @@
             controllaUtenteCorrente();
             aggiornaUI();
         });
-
         onValue(ref(realtimeDb, 'likes'), (snapshot) => {
             const data = snapshot.val() || {};
             db.likes = Object.values(data);
             aggiornaUI();
         });
-
         onValue(ref(realtimeDb, 'matches'), (snapshot) => {
             const data = snapshot.val() || {};
             db.matches = Object.keys(data).map(k => ({ id: k, ...data[k] }));
             aggiornaUI();
         });
-
         onValue(ref(realtimeDb, 'messages'), (snapshot) => {
             const data = snapshot.val() || {};
             db.messages = Object.keys(data).map(k => ({ id: k, ...data[k] }));
@@ -358,7 +352,6 @@
             
             localStorage.setItem('bm_currentUserId', String(userId));
             currentUser = userObj;
-            
             set(ref(realtimeDb, 'users/' + userId), userObj).then(() => { 
                 mostraSchermata('screen-feed');
             }).catch(e => {
@@ -375,7 +368,7 @@
             const avatarRow = document.getElementById('matches-avatar-row');
             const mieiMatches = db.matches.filter(m => m.u1 === currentUser.id || m.u2 === currentUser.id);
             let matchesHash = mieiMatches.map(m => m.id + "_" + m.shotClaimed).join(",");
-
+            
             if (mieiMatches.length > 0) {
                 matchesContainer.classList.remove('hidden');
                 if (matchesHash !== lastMatchesHash) {
@@ -393,15 +386,25 @@
                     });
                     lastMatchesHash = matchesHash;
                 }
-            } else { matchesContainer.classList.add('hidden'); lastMatchesHash = ""; }
+            } else { 
+                matchesContainer.classList.add('hidden');
+                lastMatchesHash = ""; 
+            }
 
             const feedContainer = document.getElementById('users-feed-container');
             const utentiDisponibili = db.users.filter(u => {
                 if (!u || !u.id || !currentUser || !currentUser.id) return false;
+                // Esclude se stessi
                 if (String(u.id) === String(currentUser.id)) return false;
                 if (u.name === currentUser.name && u.photo === currentUser.photo) return false;
-                if (db.matches.find(m => (m.u1 === currentUser.id && m.u2 === u.id) || (m.u1 === u.id && m.u2 === currentUser.id))) return false;
+                
+                // ESCLUSIONE TOTALE E RIGOROSA DEGLI UTENTI GIA' MATCHATI
+                const giaMatchati = db.matches.some(m => (m.u1 === currentUser.id && m.u2 === u.id) || (m.u1 === u.id && m.u2 === currentUser.id));
+                if (giaMatchati) return false;
+                
+                // Esclude le persone a cui si è già messo like
                 if (db.likes.some(l => l.from === currentUser.id && l.to === u.id)) return false;
+                
                 return true;
             });
 
@@ -412,18 +415,31 @@
                 }
                 return;
             }
+
             if (currentCardIndex >= utentiDisponibili.length) currentCardIndex = 0;
             let u = utentiDisponibili[currentCardIndex];
+            
             if (lastRenderedUserId !== u.id) {
                 feedContainer.innerHTML = `<div class="flex items-center justify-between space-x-3 max-w-sm mx-auto my-2"><button onclick="saltaUtente()" class="w-14 h-14 bg-stone-900 border border-stone-800 text-red-500 text-xl rounded-full flex items-center justify-center shadow-xl active:scale-90 flex-shrink-0 hover:bg-stone-800 transition">❌</button><div class="flex-1 bg-stone-900 border border-stone-800 rounded-3xl overflow-hidden shadow-2xl relative aspect-[3/4] max-w-[270px] mx-auto"><img src="${u.photo}" class="w-full h-full object-cover select-none pointer-events-none"><div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-stone-950 via-stone-950/80 to-transparent p-4 pt-12"><h4 class="font-black text-2xl text-white tracking-wide truncate">${u.name}</h4><p class="text-xs text-amber-400 flex items-center mt-1 font-semibold"><span class="inline-block w-2.5 h-2.5 bg-amber-400 rounded-full mr-2 animate-pulse"></span>Al Mood ora</p></div></div><button onclick="mettiLikeTinder('${u.id}')" class="w-14 h-14 bg-stone-900 border border-stone-800 text-red-500 text-xl rounded-full flex items-center justify-center shadow-xl active:scale-90 flex-shrink-0 neon-border-heart hover:bg-stone-800 transition">❤️</button></div>`;
                 lastRenderedUserId = u.id;
             }
         }
 
-        window.saltaUtente = function() { currentCardIndex++; renderFeed(); };
+        window.saltaUtente = function() { 
+            currentCardIndex++;
+            renderFeed(); 
+        };
 
         window.mettiLikeTinder = function(targetUserId) {
             if (!currentUser || (currentUser.cooldownEnd && Date.now() < currentUser.cooldownEnd) || currentUser.likesCount <= 0) return;
+            
+            // CONTROLLO DI SICUREZZA AGGIUNTIVO: Blocca il like se c'è già un match pregresso!
+            const giaMatchati = db.matches.some(m => (m.u1 === currentUser.id && m.u2 === targetUserId) || (m.u1 === targetUserId && m.u2 === currentUser.id));
+            if (giaMatchati) {
+                console.warn("Azione bloccata: L'utente è già stato matchato in passato.");
+                return;
+            }
+
             push(ref(realtimeDb, 'likes'), { from: currentUser.id, to: targetUserId, time: Date.now() });
             
             if (db.likes.some(l => l.from === targetUserId && l.to === currentUser.id)) {
@@ -437,22 +453,37 @@
             } else {
                 if (currentUser.likesCount === 1) {
                     update(ref(realtimeDb, `users/${currentUser.id}`), { cooldownEnd: Date.now() + (10 * 60 * 1000), likesCount: 0 });
-                } else { update(ref(realtimeDb, `users/${currentUser.id}`), { likesCount: currentUser.likesCount - 1 }); }
+                } else { 
+                    update(ref(realtimeDb, `users/${currentUser.id}`), { likesCount: currentUser.likesCount - 1 });
+                }
             }
         };
 
-        function apriChat(matchId) { activeChatMatchId = matchId; mostraSchermata('screen-chat'); }
-        window.tornaAlFeed = function() { activeChatMatchId = null; lastRenderedUserId = null; mostraSchermata('screen-feed'); };
+        function apriChat(matchId) { 
+            activeChatMatchId = matchId; 
+            mostraSchermata('screen-chat'); 
+        }
+        
+        window.tornaAlFeed = function() { 
+            activeChatMatchId = null;
+            lastRenderedUserId = null; 
+            mostraSchermata('screen-feed'); 
+        };
+
         window.inviaMessaggio = function() {
-            const input = document.getElementById('chat-input'); const testo = input.value.trim(); if (!testo || !activeChatMatchId) return;
+            const input = document.getElementById('chat-input');
+            const testo = input.value.trim(); 
+            if (!testo || !activeChatMatchId) return;
             push(ref(realtimeDb, 'messages'), { matchId: activeChatMatchId, sender: currentUser.id, text: testo, time: Date.now() });
             input.value = "";
         };
 
         function renderMessaggiChat() {
             if (!activeChatMatchId) return;
-            const container = document.getElementById('chat-messages'); const statusBox = document.getElementById('shot-status-box');
-            const match = db.matches.find(m => m.id === activeChatMatchId); if (!match) return;
+            const container = document.getElementById('chat-messages'); 
+            const statusBox = document.getElementById('shot-status-box');
+            const match = db.matches.find(m => m.id === activeChatMatchId); 
+            if (!match) return;
             
             if (match.shotClaimed) {
                 statusBox.className = "mt-2 p-3 bg-emerald-950/40 border border-emerald-800 text-emerald-400 rounded-xl text-center neon-border";
@@ -469,17 +500,25 @@
                 container.appendChild(div);
             });
             container.scrollTop = container.scrollHeight;
-            const partnerId = match.u1 === currentUser.id ? match.u2 : match.u1; const partner = db.users.find(u => u.id === partnerId);
-            if(partner){ document.getElementById('chat-partner-name').innerText = partner.name; document.getElementById('chat-partner-img').src = partner.photo; }
+            const partnerId = match.u1 === currentUser.id ? match.u2 : match.u1;
+            const partner = db.users.find(u => u.id === partnerId);
+            if(partner){ 
+                document.getElementById('chat-partner-name').innerText = partner.name; 
+                document.getElementById('chat-partner-img').src = partner.photo;
+            }
         }
 
         // TIMER COOLDOWN
         setInterval(() => {
             if (!currentUser) return;
-            const now = Date.now(); const timerBox = document.getElementById('cooldown-box');
-            const timerDisplay = document.getElementById('cooldown-timer'); const counterDisplay = document.getElementById('likes-counter');
+            const now = Date.now(); 
+            const timerBox = document.getElementById('cooldown-box');
+            const timerDisplay = document.getElementById('cooldown-timer'); 
+            const counterDisplay = document.getElementById('likes-counter');
+            
             if (currentUser.cooldownEnd && now < currentUser.cooldownEnd) {
-                if(timerBox) timerBox.classList.remove('hidden'); if(counterDisplay) counterDisplay.innerText = "0 / 3";
+                if(timerBox) timerBox.classList.remove('hidden'); 
+                if(counterDisplay) counterDisplay.innerText = "0 / 3";
                 const timeLeft = currentUser.cooldownEnd - now;
                 if(timerDisplay) timerDisplay.innerText = `${Math.floor(timeLeft / 60000)}:${Math.floor((timeLeft % 60000) / 1000) < 10 ? '0' : ''}${Math.floor((timeLeft % 60000) / 1000)}`;
             } else {
@@ -509,27 +548,27 @@
         };
 
         function pulisciCampiLoginAdmin() {
-            document.getElementById('admin-username').value = ""; 
+            document.getElementById('admin-username').value = "";
             document.getElementById('admin-password').value = "";
         }
 
         window.logoutAdmin = function() { 
-            isAdminAuthenticated = false; 
+            isAdminAuthenticated = false;
             adminRole = null; 
             renderAdminPanel(); 
         };
 
         function renderAdminPanel() {
-            const loginBox = document.getElementById('admin-login-box'); 
+            const loginBox = document.getElementById('admin-login-box');
             const contentBox = document.getElementById('admin-content-box');
             
             if (!isAdminAuthenticated) { 
-                loginBox.classList.remove('hidden'); 
+                loginBox.classList.remove('hidden');
                 contentBox.classList.add('hidden'); 
                 return; 
             }
             
-            loginBox.classList.add('hidden'); 
+            loginBox.classList.add('hidden');
             contentBox.classList.remove('hidden');
             
             const titleElement = document.getElementById('admin-title');
@@ -549,7 +588,7 @@
                 container.innerHTML = "";
                 
                 if (db.matches.length === 0) { 
-                    container.innerHTML = `<p class="text-center text-sm text-stone-500 py-8">Nessun match attivo nel locale per ora.</p>`; 
+                    container.innerHTML = `<p class="text-center text-sm text-stone-500 py-8">Nessun match attivo nel locale per ora.</p>`;
                     return; 
                 }
                 
@@ -567,9 +606,22 @@
             }
         }
 
-        window.convalidaShotAdmin = function(matchId) { update(ref(realtimeDb, `matches/${matchId}`), { shotClaimed: true }); };
-        window.resettareTutto = function() { if(confirm("Cancellare tutto il database cloud?")) { stopVideoFeed(); localStorage.clear(); set(ref(realtimeDb, '/'), null).then(() => location.reload()); } };
-        window.switchRole = function(role) { if (role === "admin") mostraSchermata('screen-admin'); else mostraSchermata(currentUser ? 'screen-feed' : 'screen-register'); };
+        window.convalidaShotAdmin = function(matchId) { 
+            update(ref(realtimeDb, `matches/${matchId}`), { shotClaimed: true });
+        };
+        
+        window.resettareTutto = function() { 
+            if(confirm("Cancellare tutto il database cloud?")) { 
+                stopVideoFeed(); 
+                localStorage.clear(); 
+                set(ref(realtimeDb, '/'), null).then(() => location.reload()); 
+            } 
+        };
+        
+        window.switchRole = function(role) { 
+            if (role === "admin") mostraSchermata('screen-admin'); 
+            else mostraSchermata(currentUser ? 'screen-feed' : 'screen-register'); 
+        };
 
         // --- GESTIONE PROIETTORE GIARDINO IN LOOP ---
         window.avviaProiezioneGiardino = function() {
@@ -593,55 +645,113 @@
         };
 
         // GESTIONE CAM NATIVA MOBILE
-        const videoFeed = document.getElementById('video-feed'); const photoCanvas = document.getElementById('photo-canvas');
-        const fallbackMsg = document.getElementById('fallback-msg'); const btnCameraAction = document.getElementById('btn-camera-action');
-        const btnRetake = document.getElementById('btn-retake'); const cameraText = document.getElementById('camera-text');
-        const cameraIcon = document.getElementById('camera-icon'); const btnRegisterFinal = document.getElementById('btn-register-final');
+        const videoFeed = document.getElementById('video-feed'); 
+        const photoCanvas = document.getElementById('photo-canvas');
+        const fallbackMsg = document.getElementById('fallback-msg'); 
+        const btnCameraAction = document.getElementById('btn-camera-action');
+        const btnRetake = document.getElementById('btn-retake'); 
+        const cameraText = document.getElementById('camera-text');
+        const cameraIcon = document.getElementById('camera-icon');
+        const btnRegisterFinal = document.getElementById('btn-register-final');
         let cameraState = 0;
 
-        window.gestisciAzioneFotocamera = async function() { if (isFallbackMode) { document.getElementById('camera-fallback-input').click(); return; } if (cameraState === 0) await startVideoFeed(); else if (cameraState === 1) catturaSelfie(); };
+        window.gestisciAzioneFotocamera = async function() { 
+            if (isFallbackMode) { document.getElementById('camera-fallback-input').click(); return; } 
+            if (cameraState === 0) await startVideoFeed(); 
+            else if (cameraState === 1) catturaSelfie(); 
+        };
+        
         async function startVideoFeed() {
             try {
                 videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 400, height: 400 }, audio: false });
-                videoFeed.srcObject = videoStream; videoFeed.classList.remove('hidden'); photoCanvas.classList.add('hidden'); fallbackMsg.classList.add('hidden');
-                cameraState = 1; cameraText.innerText = "Scatta Selfie ORA"; cameraIcon.innerText = "📸";
-                btnCameraAction.className = "bg-amber-400 text-stone-950 text-xs font-black px-6 py-2 rounded-full transition animate-pulse shadow-lg shadow-amber-500/20"; btnRetake.classList.add('hidden');
+                videoFeed.srcObject = videoStream; 
+                videoFeed.classList.remove('hidden'); 
+                photoCanvas.classList.add('hidden'); 
+                fallbackMsg.classList.add('hidden');
+                cameraState = 1; 
+                cameraText.innerText = "Scatta Selfie ORA"; 
+                cameraIcon.innerText = "📸";
+                btnCameraAction.className = "bg-amber-400 text-stone-950 text-xs font-black px-6 py-2 rounded-full transition animate-pulse shadow-lg shadow-amber-500/20"; 
+                btnRetake.classList.add('hidden');
             } catch (err) {
-                isFallbackMode = true; videoFeed.classList.add('hidden'); fallbackMsg.classList.remove('hidden');
-                cameraText.innerText = "Scatta Foto Istantanea"; cameraIcon.innerText = "📷"; btnCameraAction.className = "bg-amber-500 text-stone-950 text-xs font-bold px-6 py-2 rounded-full transition";
+                isFallbackMode = true;
+                videoFeed.classList.add('hidden'); 
+                fallbackMsg.classList.remove('hidden');
+                cameraText.innerText = "Scatta Foto Istantanea"; 
+                cameraIcon.innerText = "📷"; 
+                btnCameraAction.className = "bg-amber-500 text-stone-950 text-xs font-bold px-6 py-2 rounded-full transition";
                 document.getElementById('camera-fallback-input').click();
             }
         }
+        
         window.gestisciFotoFallback = function(input) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const img = new Image();
                     img.onload = function() {
-                        const context = photoCanvas.getContext('2d'); photoCanvas.width = 400; photoCanvas.height = 400;
-                        let minSide = Math.min(img.width, img.height); context.drawImage(img, (img.width - minSide)/2, (img.height - minSide)/2, minSide, minSide, 0, 0, 400, 400);
+                        const context = photoCanvas.getContext('2d');
+                        photoCanvas.width = 400; photoCanvas.height = 400;
+                        let minSide = Math.min(img.width, img.height);
+                        context.drawImage(img, (img.width - minSide)/2, (img.height - minSide)/2, minSide, minSide, 0, 0, 400, 400);
                         selfieCatturatoBase64 = photoCanvas.toDataURL('image/jpeg', 0.5);
-                        fallbackMsg.classList.add('hidden'); photoCanvas.classList.remove('hidden'); btnCameraAction.classList.add('hidden'); btnRetake.classList.remove('hidden');
+                        fallbackMsg.classList.add('hidden'); 
+                        photoCanvas.classList.remove('hidden'); 
+                        btnCameraAction.classList.add('hidden');
+                        btnRetake.classList.remove('hidden');
                         abilitaRegistrazione();
-                    }; img.src = e.target.result;
-                }; reader.readAsDataURL(input.files[0]);
+                    }; 
+                    img.src = e.target.result;
+                }; 
+                reader.readAsDataURL(input.files[0]);
             }
         };
+
         function catturaSelfie() {
             if (!videoStream) return;
-            const context = photoCanvas.getContext('2d'); photoCanvas.width = 400; photoCanvas.height = 400;
-            context.translate(400, 0); context.scale(-1, 1); context.drawImage(videoFeed, 0, 0, 400, 400);
-            selfieCatturatoBase64 = photoCanvas.toDataURL('image/jpeg', 0.5); stopVideoFeed();
-            videoFeed.classList.add('hidden'); photoCanvas.classList.remove('hidden'); cameraState = 2; btnCameraAction.classList.add('hidden'); btnRetake.classList.remove('hidden');
+            const context = photoCanvas.getContext('2d'); 
+            photoCanvas.width = 400; photoCanvas.height = 400;
+            context.translate(400, 0); 
+            context.scale(-1, 1); 
+            context.drawImage(videoFeed, 0, 0, 400, 400);
+            selfieCatturatoBase64 = photoCanvas.toDataURL('image/jpeg', 0.5); 
+            stopVideoFeed();
+            videoFeed.classList.add('hidden'); 
+            photoCanvas.classList.remove('hidden'); 
+            cameraState = 2; 
+            btnCameraAction.classList.add('hidden'); 
+            btnRetake.classList.remove('hidden');
             abilitaRegistrazione();
         }
+        
         window.resetFotocamera = function() {
-            selfieCatturatoBase64 = null; photoCanvas.classList.add('hidden'); btnRetake.classList.add('hidden'); btnCameraAction.classList.remove('hidden'); disabilitaRegistrazione();
-            if (isFallbackMode) document.getElementById('camera-fallback-input').click(); else { cameraState = 0; startVideoFeed(); }
+            selfieCatturatoBase64 = null;
+            photoCanvas.classList.add('hidden'); 
+            btnRetake.classList.add('hidden'); 
+            btnCameraAction.classList.remove('hidden'); 
+            disabilitaRegistrazione();
+            if (isFallbackMode) document.getElementById('camera-fallback-input').click(); 
+            else { cameraState = 0; startVideoFeed(); }
         };
-        function stopVideoFeed() { if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; } }
-        function abilitaRegistrazione() { btnRegisterFinal.className = "w-full bg-gradient-to-r from-yellow-400 to-amber-500 text-stone-950 font-black p-3 rounded-xl transition mt-4 neon-border shadow-lg shadow-amber-500/10"; btnRegisterFinal.innerText = "Entra nel Locale"; btnRegisterFinal.disabled = false; }
-        function disabilitaRegistrazione() { btnRegisterFinal.className = "w-full bg-stone-800 text-stone-500 font-bold p-3 rounded-xl transition mt-4 cursor-not-allowed border border-stone-700"; btnRegisterFinal.innerText = "Scatta la foto per entrare"; btnRegisterFinal.disabled = true; }
+        
+        function stopVideoFeed() { 
+            if (videoStream) { 
+                videoStream.getTracks().forEach(t => t.stop());
+                videoStream = null; 
+            } 
+        }
+        
+        function abilitaRegistrazione() { 
+            btnRegisterFinal.className = "w-full bg-gradient-to-r from-yellow-400 to-amber-500 text-stone-950 font-black p-3 rounded-xl transition mt-4 neon-border shadow-lg shadow-amber-500/10";
+            btnRegisterFinal.innerText = "Entra nel Locale"; 
+            btnRegisterFinal.disabled = false; 
+        }
+        
+        function disabilitaRegistrazione() { 
+            btnRegisterFinal.className = "w-full bg-stone-800 text-stone-500 font-bold p-3 rounded-xl transition mt-4 cursor-not-allowed border border-stone-700";
+            btnRegisterFinal.innerText = "Scatta la foto per entrare"; 
+            btnRegisterFinal.disabled = true; 
+        }
 
         mostraSchermata('screen-register');
     </script>
