@@ -158,7 +158,7 @@
                     
                     <div id="admin-projector-section" class="hidden">
                         <button onclick="avviaProiezioneGiardino()" class="w-full bg-stone-950 border border-amber-500 text-amber-400 font-black p-4 rounded-xl text-sm transition hover:bg-stone-900 uppercase tracking-wider shadow-lg neon-border mb-4">
-                            📺 Avvia Proiezione Giardino (16:9)
+                            📺 Avvia Proiezione Giardino (Schermo Intero)
                         </button>
                         <p class="text-xs text-stone-400 text-center italic">Le funzioni di gestione cassa ed erogazione shot sono disabilitate per questo account.</p>
                     </div>
@@ -282,7 +282,6 @@
         let currentScreen = "screen-register";
         let loopProiettoreInterval = null;
 
-        // Ascolti atomici per ottimizzazione banda - Aggiornati per forzare il refresh globale dell'interfaccia
         onValue(ref(realtimeDb, 'users'), (snapshot) => {
             const data = snapshot.val() || {};
             db.users = Object.values(data);
@@ -337,7 +336,6 @@
             if (currentScreen === 'screen-admin') renderAdminPanel();
         }
 
-        // REGISTRAZIONE UTENTE BLINDATA E IMMEDIATA
         window.registraUtente = function() {
             if (currentUser) { mostraSchermata('screen-feed'); return; }
             const name = document.getElementById('reg-name').value.trim();
@@ -361,7 +359,6 @@
             });
         };
 
-        // INTERFACCIA TINDER STYLE CON FILTRO ANTI-CLONE RIGOROSO
         function renderFeed() {
             if (!currentUser) return;
             const matchesContainer = document.getElementById('matches-horizontal-container');
@@ -394,15 +391,11 @@
             const feedContainer = document.getElementById('users-feed-container');
             const utentiDisponibili = db.users.filter(u => {
                 if (!u || !u.id || !currentUser || !currentUser.id) return false;
-                // Esclude se stessi
                 if (String(u.id) === String(currentUser.id)) return false;
                 if (u.name === currentUser.name && u.photo === currentUser.photo) return false;
                 
-                // ESCLUSIONE TOTALE E RIGOROSA DEGLI UTENTI GIA' MATCHATI
                 const giaMatchati = db.matches.some(m => (m.u1 === currentUser.id && m.u2 === u.id) || (m.u1 === u.id && m.u2 === currentUser.id));
                 if (giaMatchati) return false;
-                
-                // Esclude le persone a cui si è già messo like
                 if (db.likes.some(l => l.from === currentUser.id && l.to === u.id)) return false;
                 
                 return true;
@@ -433,12 +426,8 @@
         window.mettiLikeTinder = function(targetUserId) {
             if (!currentUser || (currentUser.cooldownEnd && Date.now() < currentUser.cooldownEnd) || currentUser.likesCount <= 0) return;
             
-            // CONTROLLO DI SICUREZZA AGGIUNTIVO: Blocca il like se c'è già un match pregresso!
             const giaMatchati = db.matches.some(m => (m.u1 === currentUser.id && m.u2 === targetUserId) || (m.u1 === targetUserId && m.u2 === currentUser.id));
-            if (giaMatchati) {
-                console.warn("Azione bloccata: L'utente è già stato matchato in passato.");
-                return;
-            }
+            if (giaMatchati) return;
 
             push(ref(realtimeDb, 'likes'), { from: currentUser.id, to: targetUserId, time: Date.now() });
             
@@ -508,7 +497,6 @@
             }
         }
 
-        // TIMER COOLDOWN
         setInterval(() => {
             if (!currentUser) return;
             const now = Date.now(); 
@@ -527,7 +515,6 @@
             }
         }, 1000);
 
-        // LOGICA PANEL STAFF GESTIONE MULTI-ACCOUNT
         window.loginAdmin = function() {
             const user = document.getElementById('admin-username').value.trim();
             const pass = document.getElementById('admin-password').value;
@@ -623,10 +610,20 @@
             else mostraSchermata(currentUser ? 'screen-feed' : 'screen-register'); 
         };
 
-        // --- GESTIONE PROIETTORE GIARDINO IN LOOP ---
+        // --- GESTIONE PROIETTORE CON SCHERMO INTERO NATIVO AUTOMATICO ---
         window.avviaProiezioneGiardino = function() {
+            const prjWrapper = document.getElementById('projector-wrapper');
             document.getElementById('app-wrapper').classList.add('hidden');
-            document.getElementById('projector-wrapper').classList.remove('hidden');
+            prjWrapper.classList.remove('hidden');
+            
+            // Attiva la modalità Schermo Intero Nativa del Browser
+            if (prjWrapper.requestFullscreen) {
+                prjWrapper.requestFullscreen().catch(err => console.log("Impossibile avviare Fullscreen:", err));
+            } else if (prjWrapper.webkitRequestFullscreen) { /* Safari / iOS */
+                prjWrapper.webkitRequestFullscreen();
+            } else if (prjWrapper.msRequestFullscreen) { /* IE11 */
+                prjWrapper.msRequestFullscreen();
+            }
             
             let slides = document.querySelectorAll('.projector-slide');
             let indexCorrente = 0;
@@ -640,9 +637,31 @@
 
         window.chiudiProiezione = function() {
             clearInterval(loopProiettoreInterval);
+            
+            // Se il browser è in modalità schermo intero, esce ordinatamente
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(err => console.log(err));
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+            
             document.getElementById('projector-wrapper').classList.add('hidden');
             document.getElementById('app-wrapper').classList.remove('hidden');
         };
+
+        // Ascolta il cambio di stato del Fullscreen (Utile se lo staff preme ESC fisco sulla tastiera)
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && currentScreen === 'screen-admin' && !document.getElementById('projector-wrapper').classList.contains('hidden')) {
+                chiudiProiezione();
+            }
+        });
+        document.addEventListener('webkitfullscreenchange', () => {
+            if (!document.webkitFullscreenElement && currentScreen === 'screen-admin' && !document.getElementById('projector-wrapper').classList.contains('hidden')) {
+                chiudiProiezione();
+            }
+        });
 
         // GESTIONE CAM NATIVA MOBILE
         const videoFeed = document.getElementById('video-feed'); 
